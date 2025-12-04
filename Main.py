@@ -6,6 +6,8 @@ import html
 import re
 import ctypes
 import subprocess, sys, os
+import json, traceback
+from ToolTip import *
 
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(1)
@@ -20,13 +22,102 @@ current_file = None
 filepath = None
 
 win = tk.Tk()
-win.title("BukiMD - Yeni")
 ttk.Style().theme_use("winnative")
 win.geometry("800x600")
 win.minsize(700, 500)
 win.grid_rowconfigure(1, weight=1)
 win.grid_columnconfigure(0, weight=1)
 win.grid_columnconfigure(1, weight=1)
+
+def report_callback_exception(exc_type, exc_value, exc_traceback):
+    tk_error_handler(exc_type, exc_value, exc_traceback)
+
+win.report_callback_exception = report_callback_exception
+
+configuration_file = "Configuration.json"
+
+with open(configuration_file, "r", encoding="utf-8") as f:
+    configuration = json.load(f)
+        
+show_tooltip = tk.BooleanVar(value=configuration["show_tooltip"])
+language = tk.StringVar(value=configuration["language"])
+auto_save = tk.BooleanVar(value=configuration["auto_save"])
+
+menu_labels = {}
+tab_labels = {}
+
+def toolwindow(window):
+    window.update_idletasks()
+    hwnd = ctypes.windll.user32.GetParent(window.winfo_id())
+    
+    GWL_STYLE = -16
+    WS_MINIMIZEBOX = 0x00020000
+    WS_MAXIMIZEBOX = 0x00010000
+    
+    style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_STYLE)
+    
+    style = style & ~WS_MINIMIZEBOX & ~WS_MAXIMIZEBOX
+    
+    ctypes.windll.user32.SetWindowLongW(hwnd, GWL_STYLE, style)
+    
+    ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 
+                                      0x0002 | 0x0001 | 0x0004 | 0x0020 | 0x0010)
+    
+def tk_error_handler(exc_type, exc_value, exc_traceback):
+    tb_text = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+    errorwin = tk.Toplevel(win)
+    errorwin.title("Hata")
+    errorwin.resizable(False, False)
+    errorwin.transient(win)
+    errorwin.lift()
+    errorwin.focus_force()
+    toolwindow(errorwin)
+    errorwin.grab_set()
+    
+    frame = tk.Frame(errorwin, bd=1, relief="raised")
+    frame.pack(padx=20, pady=20, fill="both", expand=True)
+    
+    if language.get() == "türkçe":
+        tk.Label(frame, text="Bir sorun oluştu: ").pack(anchor="nw", padx=5, pady=(5, 0))
+    elif language.get() == "english":
+        tk.Label(frame, text="An error occured: ").pack(anchor="nw", padx=5, pady=(5, 0))
+    
+    error = tk.Text(frame, bd=1, font=("Consolas", 10), width=50, height=20, wrap="none", padx=5, pady=5)
+    error.insert(1.0, traceback.format_exc())
+    error.config(state="disabled")
+    
+    scroll = tk.Scrollbar(frame, orient="vertical")
+    scroll.pack(padx=(0, 5), pady=5, fill="y", side='right')
+    scroll.config(command=error.yview)
+    
+    scroll2 = tk.Scrollbar(frame, orient="horizontal")
+    scroll2.pack(padx=5, pady=(0, 5), fill="x", side='bottom')
+    scroll2.config(command=error.xview)
+    
+    error.config(yscrollcommand=scroll.set)
+    error.config(xscrollcommand=scroll2.set)
+    error.pack(padx=(5, 0), pady=(5, 0), fill="both", expand=True)
+    
+    frame2 = tk.Frame(errorwin, bd=1, relief="raised")
+    frame2.pack(padx=20, pady=(0, 20))
+    
+    def copy_error():
+         error_content = error.get("1.0", "end-1c")
+         error.clipboard_clear()
+         error.clipboard_append(error_content)
+         cp.config(state="disabled")
+    
+    ok = tk.Button(frame2, text="Tamam", bd=1, command=lambda: errorwin.destroy(), width=30)
+    ok.pack(padx=5, pady=5, side="right")
+    cp = tk.Button(frame2, text="Kopyala", bd=1, command=copy_error, width=30)
+    cp.pack(padx=(5, 0), pady=5, side="left")
+    
+    if language.get() == "türkçe":
+        ok.config(text="Tamam")
+        cp.config(text="Kopyala")
+    elif language.get() == "english":
+        ok.config(text="Ok")
+        cp.config(text="Copy")
 
 if hasattr(sys, "_MEIPASS"):
     icon_path = os.path.join(sys._MEIPASS, "Icon.ico")
@@ -39,22 +130,25 @@ if os.path.exists(icon_path):
 CSS_STYLE = """
 <style>
 body {
-    font-family: 'Segoe UI', sans-serif;
+    font-family: 'Clear Sans', sans-serif;
     background-color: #ffffff;
     color: #000;
     margin: 20px;
     line-height: 1.6;
-    font-size: 15px;
+    font-size: 17px;
 }
 h1 {
-    color: #ff0000;
+    color: #0080ff;
     padding-bottom: 5px;
     margin-top: 20px;
+    border-bottom: 2px solid black;
 }
 h2 {
     color: #0080ff;
     padding-bottom: 4px;
     margin-top: 20px;
+    border-bottom: 2px solid black;
+    display: inline-block;
 }
 h3 {
     color: #000000;
@@ -80,21 +174,21 @@ h6 {
 pre code {
     display: block;
     padding: 8px 10px;
-    background: #fafafa;
-    border-radius: 6px;
     white-space: pre-wrap;
     word-wrap: break-word;
     font-family: Consolas, monospace;
     font-size: 17px;
+    border-bottom: 2px solid black;
+    padding-bottom: 5px;
 }
 
 body code {
-    background: #fafafa;
     padding: 2px 5px;
-    border-radius: 6px;
     font-family: Consolas, monospace;
     white-space: pre;
     font-size: 17px;
+    border-bottom: 2px solid black;
+    padding-bottom: 5px;
 }
 
 /* Pygments tarafından oluşturulan sınıflar */
@@ -161,7 +255,7 @@ body code {
 .codehilite .il { color: #666666 }                         /* number literal */
 
 blockquote {
-    border-left: 4px solid #0078d7;
+    border-left: 4px solid #0080ff;
     margin: 10px 0;
     padding-left: 10px;
     color: #000000;
@@ -171,19 +265,38 @@ ul, ol {
     padding-left: 5px;
 }
 table {
-    border-collapse: collapse;
-    width: 100%;
-    margin: 10px 0;
+  border-collapse: collapse;
+  width: 100%;
 }
-th, td {
-    border: 1px solid #000000;
-    padding: 8px;
-    text-align: left;
+
+td, th {
+  border-right: 2px solid #000;
+  padding: 8px 12px;
+  text-align: left;
 }
+
+td {
+  border-bottom: 2px solid #000;
+}
+
+th {
+  border-bottom: 2px solid #000;
+  color: #0080ff;
+  font-weight: bold;
+}
+
+td:last-child, th:last-child {
+  border-right: none;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
 hr {
     border: none;
-    height: 1px;
-    background: #ccc;
+    height: 2px;
+    background: #000000;
     margin: 20px 0;
 }
 a {
@@ -198,7 +311,6 @@ a:hover {
 """
 
 def sanitize_input(text):
-    # Sadece <tag> benzeri HTML etiketlerini etkisizleştir
     text = re.sub(r'<[^>]+>', lambda m: html.escape(m.group(0)), text)
     return text
 
@@ -236,23 +348,33 @@ def update_preview(event=None):
     
 def save_file(force=False):
     global current_file, changed
+
+    if current_file is None:
+        save_as()
+        return
+
     if changed or force:
-        if current_file:
-            try:
-                with open(current_file, "w", encoding="utf-8") as f:
-                    f.write(text.get("1.0", "end-1c"))
-                    win.title(f'BukiMD - {current_file}')
-                    changed = False
-            except Exception as e:
-                messagebox.showerror("Hata", f"Dosya kaydedilemedi:\n{str(e)}")
-        else:
-            save_as()
+        with open(current_file, "w", encoding="utf-8") as f:
+            f.write(text.get("1.0", "end-1c"))
+
+        win.title(f'BukiMD - {current_file}')
+        changed = False
+        save.config(state="disabled")
 
 def save_as():
     global current_file, filepath
-    filepath = filedialog.asksaveasfilename(defaultextension='.md',
-                                            filetypes=[('Markdown Dosyası', '*.md'), ('Tüm Dosyalar', '*.*')],
-                                            title='Kaydet')
+    if language.get() == "türkçe":
+        filepath = filedialog.asksaveasfilename(
+            defaultextension='.html',
+            filetypes=[('Markdown Dosyası', '*.md'), ('Tüm Dosyalar', '*.*')],
+            title='Kaydet'
+        )
+    elif language.get() == "english":
+        filepath = filedialog.asksaveasfilename(
+            defaultextension='.html',
+            filetypes=[('Markdown Files', '*.md'), ('All Files', '*.*')],
+            title='Save'
+        )
     if filepath:
         current_file = filepath
         win.title(f'BukiMD - {filepath}')
@@ -260,21 +382,24 @@ def save_as():
         
 def open_file():
     global filepath, current_file, changed
-    try:
+    
+    if language.get() == "türkçe":
         filepath = filedialog.askopenfilename(title='Aç', filetypes=[('Markdown Dosyası', '*.md'), ('Tüm dosyalar', '*.*')])
-        if filepath:
-            with open(filepath, 'r', encoding='utf-8') as file:
-                opened_file = file.read()
-            text.delete(1.0, tk.END)
-            text.insert(1.0, opened_file)
-            current_file = filepath
-            win.title(f'BukiMD - {current_file}')
-            changed = False
-            text.edit_modified(False)
-            update_preview()
-            update()
-    except Exception as e:
-        messagebox.showerror('Hata', f"Dosya açılamadı:\n{str(e)}")
+    elif language.get() == "english":
+        filepath = filedialog.askopenfilename(title='Open', filetypes=[('Markdown Files', '*.md'), ('All Files', '*.*')])
+        
+    if filepath:
+        with open(filepath, 'r', encoding='utf-8') as file:
+            opened_file = file.read()
+        text.delete(1.0, tk.END)
+        text.insert(1.0, opened_file)
+        current_file = filepath
+        win.title(f'BukiMD - {current_file}')
+        changed = False
+        text.edit_modified(False)
+        update_preview()
+        update()
+        save.config(state="disabled")
 
 def new_file():
     global current_file, filepath, changed
@@ -293,9 +418,17 @@ def new_file():
     update_title()
     update_preview()
     text.edit_modified(False)
+    text.xview_moveto(0)
+    text.yview_moveto(0)
+    text.config(xscrollcommand=scroll_h.set, yscrollcommand=scroll.set)
+    win.update_idletasks()
 
 def update_title():
-    title = "BukiMD - Yeni" if current_file is None else f"BukiMD - {current_file}"
+    if language.get() == "türkçe":
+        title = "BukiMD - Yeni" if current_file is None else f"BukiMD - {current_file}"
+    elif language.get() == "english":
+        title = "BukiMD - New" if current_file is None else f"BukiMD - {current_file}"
+        
     if changed:
         title += " *"
     win.title(title)
@@ -311,6 +444,15 @@ def save_on_exit():
             win.destroy()
     else:
         win.destroy()
+        
+    config = {
+        "show_tooltip": show_tooltip.get(),
+        "language": language.get(),
+        "auto_save": auto_save.get()
+        }
+        
+    with open(configuration_file, "w", encoding="utf-8") as f:
+        cfile = json.dump(config, f, ensure_ascii=False, indent=4)
         
 def undo_():
     try:
@@ -330,6 +472,18 @@ def update(event=None):
         changed = True
         update_title()
         text.edit_modified(False)
+        save.config(state="normal")
+        
+def show_about():
+    if language.get() == "türkçe":
+        messagebox.showinfo("Hakkında", "BukiMD v1.0.5\n© Telif Hakkı 2025 Buğra US")
+    elif language.get() == "english":
+        messagebox.showinfo("About", "BukiMD v1.0.5\n© Copyright 2025 Buğra US")
+    
+def autosv(event):
+    global current_file
+    if current_file and auto_save.get():
+        save_file()
     
 toolbar_frame = tk.Frame(win)
 toolbar_frame.grid(row=0, column=0, sticky="ew")
@@ -349,31 +503,31 @@ other_toolbar_frame.grid(row=0, column=1, sticky="e")
 other_toolbar = tk.Frame(other_toolbar_frame, bd=1, relief="raised")
 other_toolbar.grid(row=0, column=0, padx=10, pady=10, sticky="e")
 
-new = tk.Button(file_toolbar, text="📄", width=4, bd=0, command=new_file, activebackground="yellow", font=("Segoe UI Emoji", 9))
+new = tk.Button(file_toolbar, text="\uE130", width=5, pady=4, bd=0, command=new_file, activebackground="yellow", font=("Segoe Fluent Icons", 10))
 new.grid(row=0, column=0, padx=(3, 0), pady=3)
 
-open_ = tk.Button(file_toolbar, text="📂", width=4, bd=0, command=open_file, activebackground="yellow", font=("Segoe UI Emoji", 9))
+open_ = tk.Button(file_toolbar, text="\uE197", width=5, pady=4, bd=0, command=open_file, activebackground="yellow", font=("Segoe Fluent Icons", 10))
 open_.grid(row=0, column=1, pady=3)
 
-save = tk.Button(file_toolbar, text="💾", width=4, bd=0, command=save_file, activebackground="yellow", font=("Segoe UI Emoji", 9))
+save = tk.Button(file_toolbar, text="\uE105", width=5, pady=4, bd=0, command=save_file, activebackground="yellow", font=("Segoe Fluent Icons", 10))
 save.grid(row=0, column=2, pady=3, padx=(0, 3))
 
-cut = tk.Button(text_toolbar, text="✂", width=4, bd=0, command=lambda: text.event_generate("<<Cut>>"), font=("Segoe UI Emoji", 9), activebackground="yellow")
+cut = tk.Button(text_toolbar, text="\uE16B", width=5, pady=4, bd=0, command=lambda: text.event_generate("<<Cut>>"), font=("Segoe Fluent Icons", 10), activebackground="yellow")
 cut.grid(row=0, column=0, padx=(3, 0), pady=3)
 
-copy = tk.Button(text_toolbar, text="📑", width=4, bd=0, command=lambda: text.event_generate("<<Copy>>"), activebackground="yellow", font=("Segoe UI Emoji", 9))
+copy = tk.Button(text_toolbar, text="\uE16F", width=5, pady=4, bd=0, command=lambda: text.event_generate("<<Copy>>"), activebackground="yellow", font=("Segoe Fluent Icons", 10))
 copy.grid(row=0, column=1, pady=3)
 
-paste = tk.Button(text_toolbar, text="📋", width=4, bd=0, command=lambda: text.event_generate("<<Paste>>"), activebackground="yellow", font=("Segoe UI Emoji", 9))
+paste = tk.Button(text_toolbar, text="\uE16D", width=5, pady=4, bd=0, command=lambda: text.event_generate("<<Paste>>"), activebackground="yellow", font=("Segoe Fluent Icons", 10))
 paste.grid(row=0, column=2, padx=(0, 3), pady=3)
 
-undo = tk.Button(do_toolbar, text="↶", width=4, bd=0, command=undo_, font=("Segoe UI Emoji", 9), activebackground="yellow")
+undo = tk.Button(do_toolbar, text="\uE10E", width=5, pady=4, bd=0, command=undo_, font=("Segoe Fluent Icons", 10), activebackground="yellow")
 undo.grid(row=0, column=0, padx=(3, 0), pady=3)
 
-redo = tk.Button(do_toolbar, text="↷", width=4, bd=0, command=redo_, font=("Segoe UI Emoji", 9), activebackground="yellow")
+redo = tk.Button(do_toolbar, text="\uE10D", width=5, pady=4, bd=0, command=redo_, font=("Segoe Fluent Icons", 10), activebackground="yellow")
 redo.grid(row=0, column=1, padx=(0, 3), pady=3)
 
-about = tk.Button(other_toolbar, text="⁝", width=4, bd=0, command=lambda: messagebox.showinfo("Hakkında", "BukiMD v1.0.0\n2025 Buğra US"), activebackground="yellow", font=("Segoe UI Emoji", 9))
+about = tk.Button(other_toolbar, text="\uE10C", width=5, pady=4, bd=0, command=show_about, activebackground="yellow", font=("Segoe Fluent Icons", 10))
 about.grid(row=0, column=0, padx=3, pady=3, sticky="e")
 
 tab = ttk.Notebook(win)
@@ -381,16 +535,15 @@ tab = ttk.Notebook(win)
 code_tab = tk.Frame(tab)
 tab.add(code_tab, text="Kod")
 
-text = tk.Text(code_tab, wrap="word", font=("Consolas", 10), undo=True)
-text.pack(side="left", fill="both", expand=True)
+text = tk.Text(code_tab, wrap="none", font=("Consolas", 10), undo=True)
 
 pre_tab = tk.Frame(tab)
 tab.add(pre_tab, text="Önizleme")
 
 preview = HtmlFrame(pre_tab, messages_enabled=False)
-preview.pack(fill="both", expand=True)
+preview.pack(fill="both", expand=True, padx=5, pady=5)
 
-tab.grid(row=1, column=0, columnspan=2, padx=8, pady=8, sticky="nsew")
+tab.grid(row=1, column=0, columnspan=2, padx=8, pady=(0, 8), sticky="nsew")
 
 def indent(event=None):
     try:
@@ -424,10 +577,141 @@ def unindent(event=None):
         pass
     return "break"
 
+def update_settings(*args):
+    global menu_labels, tab_labels
+    if language.get() == "türkçe":
+        menu_labels = {
+            "file":{"label": "Dosya",
+                    "menus":[
+                        "Yeni",
+                        "Yeni Pencere",
+                        "Aç",
+                        "Kaydet",
+                        "Farklı Kaydet",
+                        "Çık"
+                        ]
+                    },
+            "edit":{"label": "Düzen",
+                    "menus":[
+                        "Geri Al",
+                        "Yinele",
+                        "Kes",
+                        "Kopyala",
+                        "Yapıştır",
+                        "Tümünü Seç",
+                        "Satırı Girintile",
+                        "Satırın Girintisini Azalt"
+                        ]
+                    },
+            "settings":{"label": "Ayarlar",
+                        "menus":[
+                            "Otomatik Kaydet",
+                            "Araç İpuçlarını Göster",
+                            "Dil"
+                            ]
+                        }
+            }
+        
+        tab_labels = ["Kod", "Önizleme"]
+    elif language.get() == "english":
+        menu_labels = {
+            "file":{"label": "File",
+                    "menus":[
+                        "New",
+                        "New Window",
+                        "Open",
+                        "Save",
+                        "Save As",
+                        "Exit"
+                        ]
+                    },
+            "edit":{"label": "Edit",
+                    "menus":[
+                        "Undo",
+                        "Redo",
+                        "Cut",
+                        "Copy",
+                        "Paste",
+                        "Select All",
+                        "Indent the line",
+                        "Decrease the indent of the line"
+                        ]
+                    },
+            "settings":{"label": "Settings",
+                        "menus":[
+                            "Auto Save",
+                            "Show Tooltips",
+                            "Language"
+                            ]
+                        }
+            }
+        
+        tab_labels = ["Code", "Preview"]
+    
+    if language.get() == "türkçe":
+        ToolTip(about, "Hakkında", shown=show_tooltip.get())
+        ToolTip(redo, "Yinele - Ctrl+Y", shown=show_tooltip.get())
+        ToolTip(undo, "Geri Al - Ctrl+Z", shown=show_tooltip.get())
+        ToolTip(paste, "Yapıştır - Ctrl+V", shown=show_tooltip.get())
+        ToolTip(copy, "Kopyala - Ctrl+C", shown=show_tooltip.get())
+        ToolTip(cut, "Kes - Ctrl+X", shown=show_tooltip.get())
+        ToolTip(save, "Kaydet - Ctrl+S", shown=show_tooltip.get())
+        ToolTip(open_, "Aç - Ctrl+O", shown=show_tooltip.get())
+        ToolTip(new, "Yeni - Ctrl+N", shown=show_tooltip.get())
+        
+    elif language.get() == "english":
+        ToolTip(about, "About", shown=show_tooltip.get())
+        ToolTip(redo, "Redo - Ctrl+Y", shown=show_tooltip.get())
+        ToolTip(undo, "Undo - Ctrl+Z", shown=show_tooltip.get())
+        ToolTip(paste, "Paste - Ctrl+V", shown=show_tooltip.get())
+        ToolTip(copy, "Copy - Ctrl+C", shown=show_tooltip.get())
+        ToolTip(cut, "Cut - Ctrl+X", shown=show_tooltip.get())
+        ToolTip(save, "Save - Ctrl+S", shown=show_tooltip.get())
+        ToolTip(open_, "Open - Ctrl+O", shown=show_tooltip.get())
+        ToolTip(new, "New - Ctrl+N", shown=show_tooltip.get())
+    
+    menu.entryconfig(1, label=menu_labels["file"]["label"])
+    file_menu.entryconfig(0, label=menu_labels["file"]["menus"][0])
+    file_menu.entryconfig(1, label=menu_labels["file"]["menus"][1])
+    file_menu.entryconfig(3, label=menu_labels["file"]["menus"][2])
+    file_menu.entryconfig(4, label=menu_labels["file"]["menus"][3])
+    file_menu.entryconfig(5, label=menu_labels["file"]["menus"][4])
+    file_menu.entryconfig(7, label=menu_labels["file"]["menus"][5])
+    
+    menu.entryconfig(2, label=menu_labels["edit"]["label"])
+    edit_menu.entryconfig(0, label=menu_labels["edit"]["menus"][0])
+    edit_menu.entryconfig(1, label=menu_labels["edit"]["menus"][1])
+    edit_menu.entryconfig(3, label=menu_labels["edit"]["menus"][2])
+    edit_menu.entryconfig(4, label=menu_labels["edit"]["menus"][3])
+    edit_menu.entryconfig(5, label=menu_labels["edit"]["menus"][4])
+    edit_menu.entryconfig(6, label=menu_labels["edit"]["menus"][5])
+    edit_menu.entryconfig(8, label=menu_labels["edit"]["menus"][6])
+    edit_menu.entryconfig(9, label=menu_labels["edit"]["menus"][7])
+    
+    menu.entryconfig(3, label=menu_labels["settings"]["label"])
+    pre_menu.entryconfig(0, label=menu_labels["settings"]["menus"][0])
+    pre_menu.entryconfig(1, label=menu_labels["settings"]["menus"][1])
+    pre_menu.entryconfig(2, label=menu_labels["settings"]["menus"][2])
+    
+    tab.tab(0, text=tab_labels[0])
+    tab.tab(1, text=tab_labels[1])
+    
+    update_title()
+
+show_tooltip.trace_add("write", update_settings)
+language.trace_add("write", update_settings)
+auto_save.trace_add("write", update_settings)
+
 scroll = tk.Scrollbar(code_tab)
-scroll.pack(side="right", padx=(0, 5), pady=(0, 5), fill="y")
+scroll.pack(side="right", padx=(0, 5), pady=5, fill="y")
 scroll.config(command=text.yview)
-text.config(yscrollcommand=scroll.set)
+
+scroll_h = tk.Scrollbar(code_tab, orient="horizontal")
+scroll_h.pack(side="bottom", padx=(5, 0), pady=(0, 5), fill="x")
+scroll_h.config(command=text.xview)
+text.config(xscrollcommand=scroll_h.set, yscrollcommand=scroll.set)
+
+text.pack(fill="both", padx=(5, 0), pady=(5, 0), expand=True)
 
 text.bind("<KeyRelease>", update_preview)
 text.bind("<Shift-Tab>", unindent)
@@ -445,29 +729,42 @@ menu = tk.Menu(win)
 win.config(menu=menu)
 
 file_menu = tk.Menu(menu, tearoff=0)
-file_menu.add_command(label='Yeni', command=new_file, accelerator="Ctrl+N")
-file_menu.add_command(label='Yeni Pencere', command=lambda: subprocess.Popen([sys.executable, __file__]), accelerator="Ctrl+Shift+N")
+file_menu.add_command(label='', command=new_file, accelerator="Ctrl+N")
+file_menu.add_command(label='', command=lambda: subprocess.Popen([sys.executable, __file__]), accelerator="Ctrl+Shift+N")
 file_menu.add_separator()
-file_menu.add_command(label='Aç', command=open_file, accelerator="Ctrl+O")
-file_menu.add_command(label='Kaydet', command=save_file, accelerator="Ctrl+S")
-file_menu.add_command(label='Farklı Kaydet', command=save_as, accelerator="Ctrl+Shift+S")
+file_menu.add_command(label='', command=open_file, accelerator="Ctrl+O")
+file_menu.add_command(label='', command=save_file, accelerator="Ctrl+S")
+file_menu.add_command(label='', command=save_as, accelerator="Ctrl+Shift+S")
 file_menu.add_separator()
-file_menu.add_command(label='Çık', command=lambda: win.destroy(), accelerator="Alt+F4")
-menu.add_cascade(menu=file_menu, label="Dosya")
+file_menu.add_command(label='', command=lambda: win.destroy(), accelerator="Alt+F4")
+menu.add_cascade(menu=file_menu, label="")
 
 edit_menu = tk.Menu(menu, tearoff=0)
-edit_menu.add_command(label='Geri al', command=undo_, accelerator="Ctrl+Z")
-edit_menu.add_command(label='Yinele', command=redo_, accelerator="Ctrl+Y")
+edit_menu.add_command(label='', command=undo_, accelerator="Ctrl+Z")
+edit_menu.add_command(label='', command=redo_, accelerator="Ctrl+Y")
 edit_menu.add_separator()
-edit_menu.add_command(label='Kes', command=lambda: text.event_generate('<<Cut>>'), accelerator="Ctrl+X")
-edit_menu.add_command(label='Kopyala', command=lambda: text.event_generate('<<Copy>>'), accelerator="Ctrl+C")
-edit_menu.add_command(label='Yapıştır', command=lambda: text.event_generate('<<Paste>>'), accelerator="Ctrl+V")
-edit_menu.add_command(label='Tümünü Seç', command=lambda: text.tag_add('sel', '1.0', 'end'), accelerator="Ctrl+A")
+edit_menu.add_command(label='', command=lambda: text.event_generate('<<Cut>>'), accelerator="Ctrl+X")
+edit_menu.add_command(label='', command=lambda: text.event_generate('<<Copy>>'), accelerator="Ctrl+C")
+edit_menu.add_command(label='', command=lambda: text.event_generate('<<Paste>>'), accelerator="Ctrl+V")
+edit_menu.add_command(label='', command=lambda: text.tag_add('sel', '1.0', 'end'), accelerator="Ctrl+A")
 edit_menu.add_separator()
-edit_menu.add_command(label="Satırı Girintile", command=indent, accelerator="Tab")
-edit_menu.add_command(label="Satırın Girintisini Azalt", command=unindent, accelerator="Shift+Tab")
-menu.add_cascade(menu=edit_menu, label="Düzen")
+edit_menu.add_command(label="", command=indent, accelerator="Tab")
+edit_menu.add_command(label="", command=unindent, accelerator="Shift+Tab")
+menu.add_cascade(menu=edit_menu, label="")
 
+pre_menu = tk.Menu(menu, tearoff=0)
+pre_menu.add_checkbutton(label="", onvalue=True, offvalue=False, variable=auto_save)
+pre_menu.add_checkbutton(label="", onvalue=True, offvalue=False, variable=show_tooltip)
+lang_menu = tk.Menu(menu, tearoff=0)
+lang_menu.add_radiobutton(label='Türkçe', variable=language, value="türkçe")
+lang_menu.add_radiobutton(label='English', variable=language, value="english")
+pre_menu.add_cascade(menu=lang_menu, label="")
+menu.add_cascade(menu=pre_menu, label="")
+
+update_settings()
+
+text.bind("<KeyRelease>", update_preview)
+text.bind("<KeyRelease>", autosv, add="+")
 text.bind('<Button-3>', lambda event: edit_menu.tk_popup(event.x_root, event.y_root))
 win.protocol("WM_DELETE_WINDOW", save_on_exit)
 
